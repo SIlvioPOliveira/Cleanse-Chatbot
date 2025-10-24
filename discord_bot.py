@@ -2,72 +2,63 @@
 
 import os
 import discord
-import asyncio  # Importa a biblioteca para tarefas assíncronas
+import httpx  # Biblioteca para fazer requisições HTTP
 from dotenv import load_dotenv
-from rag_chatbot_logic import RAGChatbot
 
-# Carregar variáveis de ambiente, incluindo o token do bot
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+API_URL = "http://127.0.0.1:8000/ask"  # O endereço do nosso "Cérebro" (FastAPI)
 
-# --- Configuração do Bot do Discord ---
+# --- Configuração do Bot do Discord (muito mais simples) ---
 intents = discord.Intents.default()
-intents.message_content = True  # Ativa a permissão para ler o conteúdo das mensagens
+intents.message_content = True
 bot = discord.Client(intents=intents)
-
-# Cria uma instância da nossa lógica de chatbot
-# Os modelos pesados são carregados apenas uma vez, quando o bot inicia.
-print("Iniciando o bot do Discord...")
-chatbot = RAGChatbot()
 
 @bot.event
 async def on_ready():
-    """Evento que é chamado quando o bot se conecta com sucesso ao Discord."""
     print('-----------------------------------------')
     print(f'Logado com sucesso como {bot.user}')
-    print('O bot está online e pronto para responder!')
-    print('Me mencione em um canal para começar a conversar (ex: @MeuBot qual a build do Jhin?).')
+    print('O bot está online e pronto para fazer pedidos à API!')
     print('-----------------------------------------')
 
 @bot.event
 async def on_message(message):
-    """Evento que é chamado sempre que uma mensagem é enviada em um canal que o bot pode ver."""
-    # 1. Ignora mensagens enviadas pelo próprio bot para evitar loops infinitos
     if message.author == bot.user:
         return
 
-    # 2. Verifica se o bot foi mencionado na mensagem
     if bot.user.mentioned_in(message):
-        
-        # 3. Limpa a menção da mensagem para obter a pergunta real do usuário
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
         if not query:
             await message.channel.send("Olá! Faça-me uma pergunta sobre League of Legends.")
             return
         
-        # ID do canal para manter históricos de conversa separados
-        channel_id = str(message.channel.id)
-
-        # 4. Envia uma mensagem "Pensando..." para o usuário saber que o bot está trabalhando
-        thinking_message = await message.channel.send("🧠 Analisando os dados do Reddit...")
+        thinking_message = await message.channel.send("🧠 Enviando sua pergunta para o cérebro da IA...")
 
         try:
-            # 5. [CORREÇÃO] Executa a função demorada em uma thread separada para não bloquear o bot
-            answer = await asyncio.to_thread(chatbot.get_response, channel_id, query)
+            # Usamos um 'client' para fazer a requisição para nossa API FastAPI
+            async with httpx.AsyncClient(timeout=120.0) as client: # Timeout de 120s
+                # Faz o "pedido" para o garçom (FastAPI)
+                response = await client.post(API_URL, json={"query": query, "channel_id": str(message.channel.id)})
+                response.raise_for_status() # Lança um erro se a API retornar um status de erro
+                
+                # Pega o "prato pronto" (a resposta)
+                data = response.json()
+                answer = data.get("answer", "Não recebi uma resposta válida da IA.")
             
-            # 6. Edita a mensagem "Pensando..." com a resposta final
             await thinking_message.edit(content=answer)
 
+        except httpx.RequestError as e:
+            print(f"Erro de conexão com a API: {e}")
+            await thinking_message.edit(content="Desculpe, não consegui me conectar ao cérebro da IA. Tente novamente mais tarde.")
         except Exception as e:
-            print(f"Ocorreu um erro ao processar a pergunta: {e}")
-            # Envia uma mensagem de erro mais detalhada no Discord
-            await thinking_message.edit(content=f"Desculpe, ocorreu um erro ao processar sua pergunta.")
+            print(f"Ocorreu um erro inesperado: {e}")
+            await thinking_message.edit(content="Desculpe, ocorreu um erro inesperado ao processar sua pergunta.")
 
 # --- Ponto de partida ---
 if __name__ == "__main__":
     if not TOKEN:
         print("ERRO: O DISCORD_TOKEN não foi encontrado no arquivo .env!")
     else:
-        # Inicia o bot usando o token
+        print("Iniciando o bot do Discord (o 'Rosto')...")
         bot.run(TOKEN)
