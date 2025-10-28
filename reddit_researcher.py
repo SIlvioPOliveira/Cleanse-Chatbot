@@ -11,8 +11,10 @@ CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 USER_AGENT = "script:BuscadorDeCampeoes:v1.0 (by /u/Ok-Interaction7332)"
 
 SEARCH_TARGETS = {
-    "Smolder": "SmolderMains", "Kayn": "KaynMains",
-    "Jhin": "JhinMains", "Ambessa": "AmbessaMains",
+    "Smolder": "SmolderMains",
+    "Kayn": "KaynMains",
+    "Jhin": "JhinMains", 
+    "Ambessa": "AmbessaMains",
 }
 
 POST_LIMIT = 50
